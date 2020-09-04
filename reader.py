@@ -5,7 +5,7 @@ import csv
 import collections
 import os
 
-def readShortVideo(video_path, video_category, video_name, downsample_factor=12, rescale_factor=1):
+def readShortVideo(video_path, video_category, video_name, downsample_factor=12, rescale_factor=0.5):
     '''
     @param video_path: video directory
     @param video_category: video category (see csv files)

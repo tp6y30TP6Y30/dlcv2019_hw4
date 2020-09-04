@@ -22,7 +22,7 @@ def freeze_resnet50(model):
 
 def run(args):
     torch.multiprocessing.freeze_support()
-    EPOCH = 50
+    EPOCH = 100
 
     train_dataloader = dataloader(args.task, 'train')
     train_data = DataLoader(train_dataloader, batch_size = 1, shuffle = True, num_workers = 6, pin_memory = True)
@@ -31,10 +31,10 @@ def run(args):
     test_data = DataLoader(test_dataloader, batch_size = 1, shuffle = False, num_workers = 6, pin_memory = True)
 
     model = Extractor()
-    freeze_resnet50(model)
+    # freeze_resnet50(model)
     model.cuda().float()
 
-    optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-4)
+    optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-5)
     
     loss_func = nn.CrossEntropyLoss()
     loss_func.cuda().float()
