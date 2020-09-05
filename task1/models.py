@@ -7,19 +7,18 @@ def weights_init_uniform(m):
     # for every Linear layer in a model..
     if classname.find('Linear') != -1:
         # apply a uniform distribution to the weights and a bias=0
-        m.weight.data.uniform_(0.0, 1.0)
+        m.weight.data.uniform_(0.0, 0.5)
         m.bias.data.fill_(0)
 
+def sample(feature):
+    return torch.stack((feature[0], feature[int(feature.size(0) / 2)], feature[-1]), dim = 0).view(1, -1)
+
 class Extractor(nn.Module):
-    def __init__(self, resnet_output = 1000):
+    def __init__(self, sample_channels = 3000):
         super(Extractor, self).__init__()
         self.resnet50 = models.resnet50(pretrained = True, progress = True)
         self.fc = nn.Sequential(
-                        nn.Linear(resnet_output, 2048),
-                        nn.ReLU(True),
-                        nn.Linear(2048, 1024),
-                        nn.ReLU(True),
-                        nn.Linear(1024, 11),
+                        nn.Linear(sample_channels, 11),
                         nn.Softmax(dim = 1),
                   )
         weights_init_uniform(self.fc)
@@ -27,6 +26,7 @@ class Extractor(nn.Module):
     def forward(self, input):
         input = input.squeeze(0)
         feature = self.resnet50(input)
-        predict = self.fc(feature)
+        s_feature = sample(feature)
+        predict = self.fc(s_feature)
         return predict
 
