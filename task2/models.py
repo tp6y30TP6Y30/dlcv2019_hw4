@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torchvision.models as models
 import torch.nn.utils.rnn as rnn_utils
 
 class RNN(nn.Module):
