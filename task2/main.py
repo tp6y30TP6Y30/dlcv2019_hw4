@@ -3,7 +3,7 @@ from dataloader import dataloader
 from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
-from models import RNN
+from models import LSTM
 import torch
 import torch.nn as nn
 import os
@@ -37,23 +37,23 @@ def cal_accuracy(batch_pred, batch_label):
 
 def run(args):
 	torch.multiprocessing.freeze_support()
-	EPOCH = 30
-	batch_size = 3
+	EPOCH = 100
+	batch_size = 2
 	train_dataloader = dataloader('train')
 	train_data = DataLoader(train_dataloader, batch_size = batch_size, shuffle = True, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
 
 	test_dataloader = dataloader('valid')
 	test_data = DataLoader(test_dataloader, batch_size = batch_size, shuffle = False, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
 
-	model = RNN()
+	model = LSTM()
 	if args.load != -1:
 		checkpoint = torch.load('models/model_epoch{}.pkl'.format(args.load))
-		model.rnn.load_state_dict(checkpoint['model_rnn'])
+		model.lstm.load_state_dict(checkpoint['model_lstm'])
 		model.fc.load_state_dict(checkpoint['model_fc'])
 
 	freeze_resnet50(model)
 	model.cuda().float()
-	optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-6, weight_decay = 0.012)
+	optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-7, weight_decay = 0.012)
 
 	loss_func = nn.CrossEntropyLoss(reduction = 'mean')
 	loss_func.cuda().float()
@@ -86,9 +86,9 @@ def run(args):
 		model.eval()
 		all_hit = all_total = 0
 		with torch.no_grad():
-			for index, (video, label, length_list) in enumerate(tqdm(test_data, ncols = 80, desc = '[Testing] epoch ({} / {})'.format(epoch, EPOCH))):
-				batch_video, batch_label, batch_length_list = video.to(device), label.to(device), length_list
-				prediction = model(batch_video, batch_length_list)
+			for index, (video, frame_size, label) in enumerate(tqdm(test_data, ncols = 80, desc = '[Testing] epoch ({} / {})'.format(epoch, EPOCH))):
+				batch_video, batch_frame_size, batch_label = video.to(device), frame_size.to(device), label.to(device)
+				prediction = model(batch_video, batch_frame_size)
 				prediction = prediction.squeeze(1)
 				hit, total = cal_accuracy(prediction, batch_label)
 				all_hit += hit
@@ -103,7 +103,7 @@ def run(args):
 
 		if not os.path.exists('models/'):
 			os.mkdir('models/')
-		torch.save({'model_rnn': model.rnn.state_dict(),
+		torch.save({'model_lstm': model.lstm.state_dict(),
 					'model_fc': model.fc.state_dict(),
 				   }, 'models/model_epoch{}.pkl'.format(epoch))
 			
