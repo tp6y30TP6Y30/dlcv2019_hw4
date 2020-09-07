@@ -40,10 +40,10 @@ def run(args):
 	EPOCH = 30
 	batch_size = 3
 	train_dataloader = dataloader('train')
-	train_data = DataLoader(train_dataloader, batch_size = batch_size, shuffle = True, num_workers = 0, pin_memory = True, collate_fn = collate_fn)
+	train_data = DataLoader(train_dataloader, batch_size = batch_size, shuffle = True, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
 
 	test_dataloader = dataloader('valid')
-	test_data = DataLoader(test_dataloader, batch_size = batch_size, shuffle = False, num_workers = 0, pin_memory = True, collate_fn = collate_fn)
+	test_data = DataLoader(test_dataloader, batch_size = batch_size, shuffle = False, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
 
 	model = RNN()
 	if args.load != -1:
