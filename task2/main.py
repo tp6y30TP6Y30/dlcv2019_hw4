@@ -17,36 +17,43 @@ def _parse_args():
 	parser.add_argument('--load', type = int, default = -1)
 	return parser.parse_args()
 
+def freeze_resnet50(model):
+	for param in model.resnet50.parameters():
+		param.requires_grad = False
+
 def collate_fn(data):
-	data.sort(key = lambda x: len(x[0]), reverse = True)
-	feature, label = zip(*data)
-	length_list = [len(f) for f in feature]
-	feature = [torch.stack(f) for f in feature]
-	feature = rnn_utils.pad_sequence(feature, batch_first = True, padding_value = 0)
+	data = list(map(list, data))
+	data.sort(key = lambda x : x[1], reverse = True)
+	video, frame_size, label = zip(*data)
+	video, frame_size, label = list(video), list(frame_size), list(label)
+	video = rnn_utils.pad_sequence(video, batch_first = True, padding_value = 0)
+	frame_size = torch.stack(frame_size, dim = 0)
 	label = torch.stack(label, dim = 0)
-	return feature, label, length_list
+	return video, frame_size, label
 
 def cal_accuracy(batch_pred, batch_label):
-	hit, total = 0, batch_pred.size(0)
-	for index in range(0, batch_pred.size(0)):
-		hit += 1 if torch.argmax(batch_pred[index]) == batch_label[index] else 0
+	hit, total = torch.sum(torch.argmax(batch_pred) == batch_label).item(), batch_pred.size(0)
 	return hit, total
 
 def run(args):
 	torch.multiprocessing.freeze_support()
 	EPOCH = 30
-	batch_size = 16
+	batch_size = 3
 	train_dataloader = dataloader('train')
-	train_data = DataLoader(train_dataloader, batch_size = batch_size, shuffle = True, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
+	train_data = DataLoader(train_dataloader, batch_size = batch_size, shuffle = True, num_workers = 0, pin_memory = True, collate_fn = collate_fn)
 
 	test_dataloader = dataloader('valid')
-	test_data = DataLoader(test_dataloader, batch_size = batch_size, shuffle = False, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
+	test_data = DataLoader(test_dataloader, batch_size = batch_size, shuffle = False, num_workers = 0, pin_memory = True, collate_fn = collate_fn)
 
-	rnn = RNN()
+	model = RNN()
 	if args.load != -1:
-		rnn.load_state_dict(torch.load('models/rnn_epoch{}.pkl'.format(args.load)))
-	rnn.cuda().float()
-	optimizer = torch.optim.Adam(rnn.parameters(), lr = 1e-5, weight_decay = 0.012)
+		checkpoint = torch.load('models/model_epoch{}.pkl'.format(args.load))
+		model.rnn.load_state_dict(checkpoint['model_rnn'])
+		model.fc.load_state_dict(checkpoint['model_fc'])
+
+	freeze_resnet50(model)
+	model.cuda().float()
+	optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-6, weight_decay = 0.012)
 
 	loss_func = nn.CrossEntropyLoss(reduction = 'mean')
 	loss_func.cuda().float()
@@ -56,11 +63,11 @@ def run(args):
 
 	for epoch in range(args.load + 1, EPOCH):
 		total_loss = 0
-		rnn.train()
+		model.train()
 		all_hit = all_total = 0
-		for index, (feature, label, length_list) in enumerate(tqdm(train_data, ncols = 80, desc = '[Training] epoch ({} / {})'.format(epoch, EPOCH))):
-			batch_feature, batch_label, batch_length_list = feature.to(device), label.to(device), length_list
-			prediction = rnn(batch_feature, batch_length_list)
+		for index, (video, frame_size, label) in enumerate(tqdm(train_data, ncols = 80, desc = '[Training] epoch ({} / {})'.format(epoch, EPOCH))):
+			batch_video, batch_frame_size, batch_label = video.to(device), frame_size.to(device), label.to(device)
+			prediction = model(batch_video, batch_frame_size)
 			prediction = prediction.squeeze(1)
 			hit, total = cal_accuracy(prediction, batch_label)
 			all_hit += hit
@@ -76,12 +83,12 @@ def run(args):
 			f.write('epoch: {} / {}\ntrain_avg_loss: {:.4f}\ttrain_accuracy: {:.1f}%\n'.format(epoch, EPOCH, total_loss / len(train_data), all_hit / all_total * 100))
 
 		total_loss = 0
-		rnn.eval()
+		model.eval()
 		all_hit = all_total = 0
 		with torch.no_grad():
-			for index, (feature, label, length_list) in enumerate(tqdm(test_data, ncols = 80, desc = '[Testing] epoch ({} / {})'.format(epoch, EPOCH))):
-				batch_feature, batch_label, batch_length_list = feature.to(device), label.to(device), length_list
-				prediction = rnn(batch_feature, batch_length_list)
+			for index, (video, label, length_list) in enumerate(tqdm(test_data, ncols = 80, desc = '[Testing] epoch ({} / {})'.format(epoch, EPOCH))):
+				batch_video, batch_label, batch_length_list = video.to(device), label.to(device), length_list
+				prediction = model(batch_video, batch_length_list)
 				prediction = prediction.squeeze(1)
 				hit, total = cal_accuracy(prediction, batch_label)
 				all_hit += hit
@@ -90,13 +97,15 @@ def run(args):
 				total_loss += loss
 
 			print('epoch: {} / {}\ntest_avg_loss: {:.4f}'.format(epoch, EPOCH, total_loss / len(test_data)))
-			print('test_accuracy: {:.1f}%'.format(hit / len(test_data) * 100))
+			print('test_accuracy: {:.1f}%'.format(all_hit / all_total * 100))
 			with open('loss_accuracy.txt', 'a') as f:
 				f.write('test_avg_loss: {:.4f}\ttest_accuracy: {:.1f}%\n'.format(total_loss / len(test_data), all_hit / all_total * 100))
 
 		if not os.path.exists('models/'):
 			os.mkdir('models/')
-		torch.save(rnn.state_dict(), 'models/rnn_epoch{}.pkl'.format(epoch))
+		torch.save({'model_rnn': model.rnn.state_dict(),
+					'model_fc': model.fc.state_dict(),
+				   }, 'models/model_epoch{}.pkl'.format(epoch))
 			
 if __name__ == '__main__':
 	args = _parse_args()

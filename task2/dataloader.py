@@ -6,13 +6,13 @@ from os.path import join
 import pandas as pd
 from torchvision import transforms
 import numpy as np
-import torchvision.models as models
 
 transform = transforms.Compose([transforms.ToTensor()])
 
 def video2tensor_list(video):
     tensor_list = [transform(image_slice) for image_slice in video]
-    return tensor_list
+    video_tensor = torch.stack(tensor_list, dim = 0)
+    return video_tensor
 
 class dataloader(Dataset):
     def __init__(self, mode):
@@ -20,7 +20,6 @@ class dataloader(Dataset):
         self.videoPath = '../hw4_data/TrimmedVideos/video/{}/'.format(mode)        
         self.labelPath = '../hw4_data/TrimmedVideos/label/gt_{}.csv'.format(mode)
         self.videoList = reader.getVideoList(self.labelPath)
-        self.resnet50 = models.resnet50(pretrained = True, progress = True)
 
     def __len__(self):
         return len(self.videoList['Video_index'])
@@ -28,8 +27,7 @@ class dataloader(Dataset):
     def __getitem__(self, index):
         # video.shape: (T, H, W, 3)
         video = reader.readShortVideo(self.videoPath, self.videoList['Video_category'][index], self.videoList['Video_name'][index])
-        tensor_list = video2tensor_list(video)
-        with torch.no_grad():
-            feature = [self.resnet50(tensor.unsqueeze(0)).squeeze(0) for tensor in tensor_list]
+        video_tensor = video2tensor_list(video)
+        frame_size = torch.tensor(video_tensor.size(0))
         label = torch.tensor(int(self.videoList['Action_labels'][index]))
-        return feature, label
+        return video_tensor, frame_size, label
