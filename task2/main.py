@@ -39,7 +39,7 @@ def run(args):
 	if args.mode == 'train':
 		torch.multiprocessing.freeze_support()
 		EPOCH = 100
-		batch_size = 1
+		batch_size = 2
 		train_dataloader = dataloader('train')
 		train_data = DataLoader(train_dataloader, batch_size = batch_size, shuffle = True, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
 
@@ -54,7 +54,7 @@ def run(args):
 
 		freeze_pretrain(model)
 		model.cuda().float()
-		optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-5, weight_decay = 0.012)
+		optimizer = torch.optim.Adam(filter(lambda param : param.requires_grad, model.parameters()), lr = 1e-4, weight_decay = 0.012)
 
 		loss_func = nn.NLLLoss(reduction = 'mean')
 		loss_func.cuda().float()

@@ -14,7 +14,7 @@ def depadding(feature, frame_size):
     return depadded_feature
 
 def sample_feature(feature, max_frame):
-    return torch.cat((feature[0], feature[max_frame // 2], feature[max_frame - 1]), dim = 0)
+    return torch.stack((feature[0], feature[max_frame // 2], feature[max_frame - 1]), dim = 0)
 
 class Identity(nn.Module):
     def __init__(self):
@@ -28,12 +28,11 @@ class GRU(nn.Module):
         super(GRU, self).__init__()
         self.pretrain = models.resnet50(pretrained = True, progress = True)
         self.pretrain.fc = Identity()
-        self.gru = nn.GRU(input_size = feature_size, hidden_size = hidden_size, num_layers = 10, batch_first = True, bidirectional = True, dropout = 0.5)
+        self.gru = nn.GRU(input_size = feature_size, hidden_size = hidden_size, num_layers = 3, batch_first = True, bidirectional = True, dropout = 0.5)
         self.fc = nn.Sequential(
-                        # nn.Linear(hidden_size * 6, hidden_size * 2),
-                        # nn.ReLU(True),
-                        # nn.Linear(hidden_size * 2, output_size),
-                        nn.Linear(hidden_size * 6, output_size),
+                        nn.Linear(hidden_size * 6, hidden_size * 2),
+                        nn.ReLU(True),
+                        nn.Linear(hidden_size * 2, output_size),
                         nn.LogSoftmax(dim = 1),
                   )
         self._initial_weights()
@@ -50,13 +49,14 @@ class GRU(nn.Module):
         video = video.view((-1, ) + video_size)
         feature = self.pretrain(video)
         feature = feature.view(frame_size.size(0), -1, feature.size(-1))
-        feature_pack = rnn_utils.pack_padded_sequence(feature, frame_size, batch_first = True)
-        output, _ = self.gru(feature_pack)
-        output, _ = rnn_utils.pad_packed_sequence(output, batch_first = True)
-        # depadded_feature = depadding(output, frame_size)
+        chosen_feature = []
+        for index in range(len(feature)):
+            chosen_feature.append(sample_feature(feature[index], frame_size[index]))
+        chosen_feature = torch.stack(chosen_feature, dim = 0)
+        output, _ = self.gru(chosen_feature)
         predict = []
         for index in range(len(output)):
-            predict.append(self.fc(sample_feature(output[index], frame_size[index]).unsqueeze(0)))
+            predict.append(self.fc(output[index].reshape(1, -1)))
         predict = torch.stack(predict, dim = 0)
         return predict
 
