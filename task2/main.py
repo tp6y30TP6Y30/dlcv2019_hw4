@@ -3,7 +3,7 @@ from dataloader import dataloader
 from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
-from models import LSTM
+from models import GRU
 import torch
 import torch.nn as nn
 import os
@@ -46,10 +46,10 @@ def run(args):
 		test_dataloader = dataloader('valid')
 		test_data = DataLoader(test_dataloader, batch_size = batch_size, shuffle = False, num_workers = 6, pin_memory = True, collate_fn = collate_fn)
 
-		model = LSTM()
+		model = GRU()
 		if args.load != -1:
 			checkpoint = torch.load('models/model_epoch{}.pkl'.format(args.load))
-			model.lstm1.load_state_dict(checkpoint['model_lstm1'])
+			model.gru.load_state_dict(checkpoint['model_gru'])
 			model.fc.load_state_dict(checkpoint['model_fc'])
 
 		freeze_pretrain(model)
@@ -105,7 +105,7 @@ def run(args):
 
 			if not os.path.exists('models/'):
 				os.mkdir('models/')
-			torch.save({'model_lstm1': model.lstm1.state_dict(),
+			torch.save({'model_gru': model.gru.state_dict(),
 						'model_fc': model.fc.state_dict(),
 					   }, 'models/model_epoch{}.pkl'.format(epoch))
 
@@ -118,7 +118,7 @@ def run(args):
 
 		model = LSTM()
 		checkpoint = torch.load('models/model_epoch{}.pkl'.format(args.load))
-		model.lstm1.load_state_dict(checkpoint['model_lstm1'])
+		model.gru.load_state_dict(checkpoint['model_gru'])
 		model.fc.load_state_dict(checkpoint['model_fc'])
 		model.cuda().float()
 

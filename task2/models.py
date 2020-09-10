@@ -13,6 +13,9 @@ def depadding(feature, frame_size):
         depadded_feature.append(f[0:frame_size[index]])
     return depadded_feature
 
+def sample_feature(feature, max_frame):
+    return torch.cat((feature[0], feature[max_frame // 2], feature[max_frame - 1]), dim = 0)
+
 class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
@@ -20,16 +23,17 @@ class Identity(nn.Module):
     def forward(self, input):
         return input
 
-class LSTM(nn.Module):
-    def __init__(self, feature_size = 2048, hidden_size = 2048, output_size = 11):
-        super(LSTM, self).__init__()
+class GRU(nn.Module):
+    def __init__(self, feature_size = 2048, hidden_size = 1024, output_size = 11):
+        super(GRU, self).__init__()
         self.pretrain = models.resnet50(pretrained = True, progress = True)
         self.pretrain.fc = Identity()
-        self.lstm1 = nn.LSTM(input_size = feature_size, hidden_size = hidden_size, num_layers = 2, batch_first = True, bidirectional = True, dropout = 0.5)
+        self.gru = nn.GRU(input_size = feature_size, hidden_size = hidden_size, num_layers = 10, batch_first = True, bidirectional = True, dropout = 0.5)
         self.fc = nn.Sequential(
-                        nn.Linear(hidden_size * 2, hidden_size),
-                        nn.ReLU(True),
-                        nn.Linear(hidden_size, output_size),
+                        # nn.Linear(hidden_size * 6, hidden_size * 2),
+                        # nn.ReLU(True),
+                        # nn.Linear(hidden_size * 2, output_size),
+                        nn.Linear(hidden_size * 6, output_size),
                         nn.LogSoftmax(dim = 1),
                   )
         self._initial_weights()
@@ -47,12 +51,12 @@ class LSTM(nn.Module):
         feature = self.pretrain(video)
         feature = feature.view(frame_size.size(0), -1, feature.size(-1))
         feature_pack = rnn_utils.pack_padded_sequence(feature, frame_size, batch_first = True)
-        output, _ = self.lstm1(feature_pack)
+        output, _ = self.gru(feature_pack)
         output, _ = rnn_utils.pad_packed_sequence(output, batch_first = True)
         # depadded_feature = depadding(output, frame_size)
         predict = []
         for index in range(len(output)):
-            predict.append(self.fc(output[index][frame_size[index] // 2].unsqueeze(0)))
+            predict.append(self.fc(sample_feature(output[index], frame_size[index]).unsqueeze(0)))
         predict = torch.stack(predict, dim = 0)
         return predict
 
